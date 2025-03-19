@@ -30,34 +30,12 @@ class SneakerProduct:
         )
 
 class SneakerAPI:
-    def __init__(self, base_url: str = "https://api.sneakersapi.dev"):
-        self.base_url = base_url.rstrip('/')
-        self.session = requests.Session()
-        
-    # def get_product(self, product_id: str) -> Optional[SneakerProduct]:
-    #     """
-    #     Get detailed information about a specific product by ID.
-        
-    #     Args:
-    #         product_id (str): Product ID or slug
-            
-    #     Returns:
-    #         Optional[SneakerProduct]: Product information if found, None if not found
-    #     """
-    #     try:
-    #         url = f"{self.base_url}/product/{product_id}"
-    #         response = self.session.get(url, timeout=10)
-    #         response.raise_for_status()
-            
-    #         data = response.json()
-    #         return SneakerProduct.from_api_response(data)
-            
-    #     except requests.RequestException as e:
-    #         print(f"Error fetching product {product_id}: {e}")
-    #         return None
-    #     except json.JSONDecodeError as e:
-    #         print(f"Error parsing response for product {product_id}: {e}")
-    #         return None
+    def __init__(self):
+        self.api_key = "sd_HpX6MyxuZgKhwfWE5tdMqGugtLI9pXnb"
+        self.base_url = "https://api.sneakersapi.dev/api/v3/stockx"
+
+    url = "https://api.sneakersapi.dev/api/v3/stockx/products"
+    headers = {"Authorization": "sd_HpX6MyxuZgKhwfWE5tdMqGugtLI9pXnb"}
             
     def search_products(self, SKU: str) -> List[SneakerProduct]:
         """
@@ -71,16 +49,18 @@ class SneakerAPI:
             List[SneakerProduct]: List of matching products
         """
         try:
-            url = f"{self.base_url}/search"
-            params = {"sku": SKU}
-            response = self.session.get(url, params=params, timeout=10)
+            url = f"{self.base_url}/products"
+            querystring = {"sku": SKU}
+            headers = {"Authorization": "sd_HpX6MyxuZgKhwfWE5tdMqGugtLI9pXnb"}
+            response = requests.request("GET", url, headers=headers, params=querystring)
             response.raise_for_status()
+            print(response.text)
             
             data = response.json()
-            # Assuming the API returns a list of products in a 'results' field
-            products = data.get('hits', [])
+            # Assuming the API returns a list of products in a 'data' field
+            products = data.get('data', [])
             return [SneakerProduct.from_api_response(product) for product in products]
-            
+
         except requests.RequestException as e:
             print(f"Error searching for '{SKU}': {e}")
             return []
