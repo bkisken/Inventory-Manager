@@ -59,7 +59,10 @@ class SneakerAPI:
             data = response.json()
             # Assuming the API returns a list of products in a 'data' field
             products = data.get('data', [])
-            return [SneakerProduct.from_api_response(product) for product in products]
+            if products:
+                return [SneakerProduct.from_api_response(product) for product in products]
+            else:
+                print("No item found")
 
         except requests.RequestException as e:
             print(f"Error searching for '{SKU}': {e}")
