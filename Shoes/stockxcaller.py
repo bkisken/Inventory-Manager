@@ -25,7 +25,7 @@ class SneakerProduct:
             model=data.get('slug', ''),
             sku=data.get('sku'),
             retail_price=data.get('retail_price'),
-            avg_price=data.get('avg_price'),
+            avg_price=data.get('min_price'),
             release_date=data.get('release_date')
         )
 
@@ -87,7 +87,7 @@ def print_product(product: SneakerProduct) -> None:
     if product.sku:
         print(f"SKU: {product.sku}")
     print(f"Retail Price: ${product.retail_price}") #retail_price is a string
-    print(f"Average Price: {format_price(product.avg_price)}")
+    print(f"Average Price: {format_price(product.min_price)}")
     if product.release_date:
         print(f"Release Date: {product.release_date}")
     print(f"Product ID: {product.id}")

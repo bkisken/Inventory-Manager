@@ -1,0 +1,11 @@
+to start, run cmd
+
+pip install opencv-python
+pip install pyzbar
+
+then, run the scantest.py file
+
+create a new inventory, name it
+add a shoe by inputing sku number
+or use scan shoe and scan a barcode
+NOTE: barcode scanner might not work on some shoes, its been tested with a jordan
