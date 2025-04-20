@@ -2,6 +2,7 @@ to start, run cmd
 
 pip install opencv-python
 pip install pyzbar
+pip install pillow
 
 then, run the scantest.py file
 
