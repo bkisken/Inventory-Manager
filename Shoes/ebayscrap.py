@@ -84,13 +84,18 @@ def search_shoes(sku):
                 if sku_clean in title_clean:
                     price_tag = item.find('span', class_='s-item__price')
                     link_tag = item.find('a', class_='s-item__link')
-                    date_tag = item.find('span', class_='s-item__ended-date')
+                    date = None
+                    sold_info = item.find('span', class_='s-item__title--tagblock')
+                    if sold_info:
+                        sold_text = sold_info.get_text(strip=True)
+                        match = re.search(r'Sold\s+(\d+)\s+day', sold_text)
+                        if match:
+                            days_ago = int(match.group(1))
+                            date = datetime.now() - timedelta(days=days_ago)
 
                     price = price_tag.get_text(strip=True) if price_tag else '0'
                     link = link_tag['href'] if link_tag else ''
-                    date_str = date_tag.get_text(strip=True) if date_tag else None
-                    date = parse_date(date_str) if date_str else None
-
+            
                     items_list.append({
                         'Title': title,
                         'Price': price,
@@ -113,11 +118,11 @@ def search_shoes(sku):
 
 
 
-def parse_date(date_str):
-    try:
-        return pd.to_datetime(date_str)
-    except:
-        return None
+#def parse_date(date_str):
+ #   try:
+  #      return pd.to_datetime(date_str)
+ #   except:
+   #     return None
 
 def clean_price(price_str): # if you get a 0 it is likely because of this clean price is off
     """Extract and clean the first float-looking price from a string like '$150.00 to $199.99'"""
@@ -157,9 +162,8 @@ def calculate_metrics(df):
     return metrics
 
 def main():
-    sku = "DH6931-001"
-
-        #sku = input("Enter SKU (primary search term): ")
+    
+    sku = input("Enter SKU (primary search term): ")
         # brand = input("Enter brand (optional, press enter to skip): ") or None
         #model = input("Enter model (optional, press enter to skip): ") or None
         #size = input("Enter size (optional, press enter to skip): ") or None
@@ -177,7 +181,7 @@ def main():
     if df.empty:
         print("No results found") 
     else:
-      #  print(df)
+        print(df)
         metrics = calculate_metrics(df)
         if metrics:
             print("\nSales Metrics:")
