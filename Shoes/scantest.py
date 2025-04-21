@@ -32,7 +32,7 @@ DEFAULT_SIZES = [
 ]
 
 # Barcode API settings
-BARCODE_API_KEY = "z6l0h91o0jyplyrlte8y4xhsjo9417"
+BARCODE_API_KEY = "ln052jx0lgrqtbtbqpgpwqj2w4he7s"
 
 class BarcodeAPI:
     def __init__(self):
