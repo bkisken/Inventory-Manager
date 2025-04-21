@@ -24,6 +24,13 @@ except ImportError:
     print("Warning: stockxcaller module not found. StockX functionality will be limited.")
     SneakerAPI = None
 
+# Import our unified search module
+try:
+    from unified_search import UnifiedSneakerSearch
+except ImportError:
+    print("Warning: unified_search module not found. Please ensure it's in the correct directory.")
+    UnifiedSneakerSearch = None
+
 # Constants
 INVENTORY_FILE = "inventory_data.json"
 DEFAULT_SIZES = [
@@ -56,6 +63,7 @@ class BarcodeAPI:
 
 class InventoryManager:
     def __init__(self):
+        self.unified_searcher = UnifiedSneakerSearch() if UnifiedSneakerSearch else None 
         self.inventories = self.load_inventory_data()
         self.api = SneakerAPI() if SneakerAPI else None
         self.barcode_api = BarcodeAPI()
@@ -173,44 +181,107 @@ class InventoryManager:
         return round(sum(prices) / len(prices), 2) if prices else 0.0
         
     def get_shoe_details(self, sku):
-        """Fetch shoe details from StockX API"""
-        if not self.api:
-            return {
-                "name": "Unknown",
-                "brand": "Unknown",
-                "retail_price": 0,
-                "avg_price": 0,
-                "sku": sku
-            }
-            
-        try:
-            products = self.api.search_products(sku)
-            if products and len(products) > 0:
-                product = products[0]
-                return {
-                    "name": product.name,
-                    "brand": product.brand,
-                    "retail_price": product.retail_price,
-                    "avg_price": product.avg_price,
-                    "sku": sku
-                }
-            else:
+        """Fetch shoe details using the unified search"""
+        if not self.unified_searcher:
+            # Fallback to existing StockX-only implementation
+            if not self.api:
                 return {
                     "name": "Unknown",
                     "brand": "Unknown",
                     "retail_price": 0,
                     "avg_price": 0,
-                    "sku": sku
+                    "sku": sku,
+                    "stockx_price": 0,
+                    "ebay_price": 0,
+                    "goat_price": 0,
+                    "high_price": 0,
+                    "low_price": 0,
+                    "total_sales": 0
                 }
-        except Exception as e:
-            print(f"Error fetching shoe details: {e}")
+                
+            try:
+                # Use existing StockX implementation
+                products = self.api.search_products(sku)
+                if products and len(products) > 0:
+                    product = products[0]
+                    return {
+                        "name": product.name,
+                        "brand": product.brand,
+                        "retail_price": product.retail_price,
+                        "avg_price": product.avg_price,
+                        "sku": sku,
+                        "stockx_price": product.avg_price,
+                        "ebay_price": 0,
+                        "goat_price": 0,
+                        "high_price": product.avg_price,
+                        "low_price": product.avg_price,
+                        "total_sales": 0
+                    }
+                else:
+                    return {
+                        "name": "Unknown",
+                        "brand": "Unknown",
+                        "retail_price": 0,
+                        "avg_price": 0,
+                        "sku": sku,
+                        "stockx_price": 0,
+                        "ebay_price": 0,
+                        "goat_price": 0,
+                        "high_price": 0,
+                        "low_price": 0,
+                        "total_sales": 0
+                    }
+            except Exception as e:
+                print(f"Error fetching shoe details: {e}")
+                return {
+                    "name": "Unknown",
+                    "brand": "Unknown",
+                    "retail_price": 0,
+                    "avg_price": 0,
+                    "sku": sku,
+                    "stockx_price": 0,
+                    "ebay_price": 0,
+                    "goat_price": 0,
+                    "high_price": 0,
+                    "low_price": 0,
+                    "total_sales": 0
+                }
+            
+        try:
+            # Use the unified search to get combined data
+            search_results = self.unified_searcher.search(sku)
+            
+            # Extract data from the aggregated results
+            aggregated = search_results['aggregated']
+            
+            # Extract platform-specific prices
+            stockx_price = search_results['stockx'].get('avg_price', 0) if search_results['stockx'] and search_results['stockx'].get('success', False) else 0
+            
+            ebay_price = 0
+            if search_results['ebay'] and search_results['ebay'].get('success', False):
+                ebay_price = search_results['ebay']['data'].get('average_price', 0)
+            
+            goat_price = 0
+            if search_results['goat'] and search_results['goat'].get('success', False):
+                goat_price = search_results['goat']['data'].get('lowestPrice', 0)
+            
             return {
-                "name": "Unknown",
-                "brand": "Unknown",
-                "retail_price": 0,
-                "avg_price": 0,
-                "sku": sku
+                "name": aggregated['name'] or "Unknown",
+                "brand": aggregated['brand'] or "Unknown",
+                "retail_price": aggregated['retail_price'] or 0,
+                "avg_price": aggregated['avg_price'] or 0,
+                "sku": sku,
+                "stockx_price": stockx_price or 0,
+                "ebay_price": ebay_price or 0,
+                "goat_price": goat_price or 0,
+                "high_price": aggregated['highest_price'] or 0,
+                "low_price": aggregated['lowest_price'] or 0,
+                "total_sales": aggregated['total_sales'] or 0
             }
+        except Exception as e:
+            print(f"Error fetching shoe details using unified search: {e}")
+            # Fall back to existing StockX implementation
+            return self.get_stockx_details(sku)
     
     def add_shoe(self, inventory_name, sku, size, quantity=1, condition="New", color="Unknown", manual_retail_price=None):
         """Add a shoe to an inventory"""
@@ -237,6 +308,12 @@ class InventoryManager:
                 "brand": shoe_details["brand"],
                 "retail_price": shoe_details["retail_price"],
                 "avg_price": shoe_details["avg_price"],
+                "stockx_price": shoe_details.get("stockx_price", 0),
+                "ebay_price": shoe_details.get("ebay_price", 0),
+                "goat_price": shoe_details.get("goat_price", 0),
+                "high_price": shoe_details.get("high_price", 0),
+                "low_price": shoe_details.get("low_price", 0),
+                "total_sales": shoe_details.get("total_sales", 0),
                 "sizes": {}
             }
                 
@@ -552,6 +629,10 @@ class InventoryApp:
         
         remove_shoe_btn = ttk.Button(action_frame, text="Remove Selected Shoe", command=self.remove_selected_shoe)
         remove_shoe_btn.pack(fill=tk.X, padx=5, pady=5)
+
+        # Add new button for updating prices
+        update_prices_btn = ttk.Button(action_frame, text="Update Shoe Prices", command=self.update_all_shoe_prices)
+        update_prices_btn.pack(fill=tk.X, padx=5, pady=5)
         
         # Stats area
         stats_frame = ttk.LabelFrame(self.sidebar_frame, text="Statistics", padding=5)
@@ -569,8 +650,8 @@ class InventoryApp:
         tree_frame = ttk.Frame(self.content_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # Create Treeview for inventory display
-        self.tree = ttk.Treeview(tree_frame, columns=("sku", "name", "brand", "retail", "resell", "quantity"))
+        # Create Treeview for inventory display with new columns for platform prices
+        self.tree = ttk.Treeview(tree_frame, columns=("sku", "name", "brand", "retail", "avg", "stockx", "ebay", "goat", "high", "low", "sales", "quantity"))
         
         # Configure scrollbars
         vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
@@ -592,17 +673,29 @@ class InventoryApp:
         self.tree.heading("name", text="Name")
         self.tree.heading("brand", text="Brand")
         self.tree.heading("retail", text="Retail")
-        self.tree.heading("resell", text="Resell")
+        self.tree.heading("avg", text="Avg")
+        self.tree.heading("stockx", text="StockX")
+        self.tree.heading("ebay", text="eBay")
+        self.tree.heading("goat", text="GOAT")
+        self.tree.heading("high", text="High")
+        self.tree.heading("low", text="Low")
+        self.tree.heading("sales", text="Sales")
         self.tree.heading("quantity", text="Qty")
-        
+
         # Configure column widths
-        self.tree.column("#0", width=50, stretch=False)
-        self.tree.column("sku", width=100, stretch=False)
-        self.tree.column("name", width=250)
-        self.tree.column("brand", width=100)
-        self.tree.column("retail", width=80, anchor=tk.E)
-        self.tree.column("resell", width=80, anchor=tk.E)
-        self.tree.column("quantity", width=50, anchor=tk.CENTER)
+        self.tree.column("#0", width=40, stretch=False)
+        self.tree.column("sku", width=80, stretch=False)
+        self.tree.column("name", width=200)
+        self.tree.column("brand", width=80)
+        self.tree.column("retail", width=60, anchor=tk.E)
+        self.tree.column("avg", width=60, anchor=tk.E)
+        self.tree.column("stockx", width=60, anchor=tk.E)
+        self.tree.column("ebay", width=60, anchor=tk.E)
+        self.tree.column("goat", width=60, anchor=tk.E)
+        self.tree.column("high", width=60, anchor=tk.E)
+        self.tree.column("low", width=60, anchor=tk.E)
+        self.tree.column("sales", width=50, anchor=tk.CENTER)
+        self.tree.column("quantity", width=40, anchor=tk.CENTER)
         
         # Create a details frame
         details_frame = ttk.LabelFrame(self.content_frame, text="Selected Shoe Details", padding=5)
@@ -616,22 +709,40 @@ class InventoryApp:
         ttk.Label(details_grid, text="Name:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
         self.detail_name = ttk.Label(details_grid, text="")
         self.detail_name.grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
-        
+
         ttk.Label(details_grid, text="SKU:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
         self.detail_sku = ttk.Label(details_grid, text="")
         self.detail_sku.grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
-        
+
         ttk.Label(details_grid, text="Brand:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
         self.detail_brand = ttk.Label(details_grid, text="")
         self.detail_brand.grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
-        
+
+        # First row of pricing info
         ttk.Label(details_grid, text="Retail:").grid(row=0, column=2, sticky=tk.W, padx=5, pady=2)
         self.detail_retail = ttk.Label(details_grid, text="")
         self.detail_retail.grid(row=0, column=3, sticky=tk.W, padx=5, pady=2)
-        
+
         ttk.Label(details_grid, text="Avg Price:").grid(row=1, column=2, sticky=tk.W, padx=5, pady=2)
         self.detail_avg_price = ttk.Label(details_grid, text="")
         self.detail_avg_price.grid(row=1, column=3, sticky=tk.W, padx=5, pady=2)
+
+        ttk.Label(details_grid, text="Total Sales:").grid(row=2, column=2, sticky=tk.W, padx=5, pady=2)
+        self.detail_sales = ttk.Label(details_grid, text="")
+        self.detail_sales.grid(row=2, column=3, sticky=tk.W, padx=5, pady=2)
+
+        # Second row of pricing info (platform-specific)
+        ttk.Label(details_grid, text="StockX Price:").grid(row=0, column=4, sticky=tk.W, padx=5, pady=2)
+        self.detail_stockx = ttk.Label(details_grid, text="")
+        self.detail_stockx.grid(row=0, column=5, sticky=tk.W, padx=5, pady=2)
+
+        ttk.Label(details_grid, text="eBay Price:").grid(row=1, column=4, sticky=tk.W, padx=5, pady=2)
+        self.detail_ebay = ttk.Label(details_grid, text="")
+        self.detail_ebay.grid(row=1, column=5, sticky=tk.W, padx=5, pady=2)
+
+        ttk.Label(details_grid, text="GOAT Price:").grid(row=2, column=4, sticky=tk.W, padx=5, pady=2)
+        self.detail_goat = ttk.Label(details_grid, text="")
+        self.detail_goat.grid(row=2, column=5, sticky=tk.W, padx=5, pady=2)
         
         # Sizes frame
         self.sizes_frame = ttk.LabelFrame(details_frame, text="Sizes")
@@ -696,6 +807,12 @@ class InventoryApp:
                 sku, name, brand, 
                 f"${retail_price:.2f}" if retail_price else "N/A",
                 f"${avg_price:.2f}" if avg_price else "N/A",
+                f"${details.get('stockx_price', 0):.2f}" if details.get('stockx_price') else "N/A",
+                f"${details.get('ebay_price', 0):.2f}" if details.get('ebay_price') else "N/A",
+                f"${details.get('goat_price', 0):.2f}" if details.get('goat_price') else "N/A",
+                f"${details.get('high_price', 0):.2f}" if details.get('high_price') else "N/A",
+                f"${details.get('low_price', 0):.2f}" if details.get('low_price') else "N/A",
+                details.get('total_sales', 0),
                 quantity
             ), iid=sku)
             
@@ -723,8 +840,21 @@ class InventoryApp:
         self.detail_name.config(text=shoe.get("name", "Unknown"))
         self.detail_sku.config(text=sku)
         self.detail_brand.config(text=shoe.get("brand", "Unknown"))
-        self.detail_retail.config(text=f"${shoe.get('retail_price', 0):.2f}")
-        self.detail_avg_price.config(text=f"${shoe.get('avg_price', 0):.2f}")
+
+        # Update price details
+        retail_price = shoe.get("retail_price", 0) or 0
+        avg_price = shoe.get("avg_price", 0) or 0
+        stockx_price = shoe.get("stockx_price", 0) or 0
+        ebay_price = shoe.get("ebay_price", 0) or 0
+        goat_price = shoe.get("goat_price", 0) or 0
+        total_sales = shoe.get("total_sales", 0) or 0
+
+        self.detail_retail.config(text=f"${retail_price:.2f}")
+        self.detail_avg_price.config(text=f"${avg_price:.2f}")
+        self.detail_stockx.config(text=f"${stockx_price:.2f}")
+        self.detail_ebay.config(text=f"${ebay_price:.2f}")
+        self.detail_goat.config(text=f"${goat_price:.2f}")
+        self.detail_sales.config(text=f"{total_sales}")
         
         # Clear existing size widgets
         for widget in self.sizes_frame.winfo_children():
@@ -1128,6 +1258,141 @@ class InventoryApp:
                     messagebox.showinfo("Success", f"Removed SKU {sku} from inventory")
                 else:
                     messagebox.showerror("Error", "Failed to remove shoe")
+    
+    def update_all_shoe_prices(self):
+        """Update prices for all shoes in the current inventory"""
+        inventory_name = self.current_inventory.get()
+        
+        if not inventory_name:
+            messagebox.showerror("Error", "Please select an inventory first.")
+            return
+        
+        inventory = self.manager.get_inventory(inventory_name)
+        if not inventory:
+            messagebox.showinfo("Info", "Inventory is empty.")
+            return
+        
+        # Count total items
+        total_items = len(inventory)
+        if total_items == 0:
+            messagebox.showinfo("Info", "No shoes in inventory to update.")
+            return
+        
+        # Show status dialog
+        status_dialog = tk.Toplevel(self.root)
+        status_dialog.title("Updating All Prices")
+        status_dialog.geometry("400x200")
+        status_dialog.transient(self.root)
+        status_dialog.grab_set()
+        
+        # Status content
+        frame = ttk.Frame(status_dialog, padding="10")
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        status_label = ttk.Label(frame, text=f"Updating prices for {total_items} shoes...")
+        status_label.pack(pady=10)
+        
+        # Progress information
+        progress_text = ttk.Label(frame, text="Processing item 0 of {}".format(total_items))
+        progress_text.pack(pady=5)
+        
+        # Current item being processed
+        current_item_label = ttk.Label(frame, text="")
+        current_item_label.pack(pady=5)
+        
+        # Progress bar
+        progress = ttk.Progressbar(frame, orient="horizontal", length=300, mode="determinate", maximum=total_items)
+        progress.pack(fill=tk.X, pady=10)
+        
+        # Cancel button
+        cancel_var = tk.BooleanVar(value=False)
+        
+        def cancel_update():
+            cancel_var.set(True)
+            status_label.config(text="Cancelling...")
+        
+        cancel_btn = ttk.Button(frame, text="Cancel", command=cancel_update)
+        cancel_btn.pack(pady=5)
+        
+        # Function to update prices in a separate thread
+        def update_thread():
+            updated_count = 0
+            skipped_count = 0
+            error_count = 0
+            
+            try:
+                # Process each shoe
+                for i, (sku, shoe) in enumerate(inventory.items()):
+                    # Check if cancel was requested
+                    if cancel_var.get():
+                        status_dialog.after(0, lambda: status_label.config(
+                            text=f"Cancelled. Updated {updated_count} of {total_items} shoes."
+                        ))
+                        break
+                    
+                    # Update progress
+                    status_dialog.after(0, lambda i=i, sku=sku: [
+                        progress.config(value=i),
+                        progress_text.config(text=f"Processing item {i+1} of {total_items}"),
+                        current_item_label.config(text=f"Current: {sku}")
+                    ])
+                    
+                    try:
+                        # Get fresh details from all platforms
+                        details = self.manager.get_shoe_details(sku)
+                        
+                        # Skip if no updated details found
+                        if details["name"] == "Unknown" and details["brand"] == "Unknown":
+                            skipped_count += 1
+                            continue
+                        
+                        # Update the shoe in the inventory
+                        shoe["avg_price"] = details["avg_price"]
+                        shoe["stockx_price"] = details["stockx_price"]
+                        shoe["ebay_price"] = details["ebay_price"]
+                        shoe["goat_price"] = details["goat_price"]
+                        shoe["high_price"] = details["high_price"]
+                        shoe["low_price"] = details["low_price"]
+                        shoe["total_sales"] = details["total_sales"]
+                        
+                        updated_count += 1
+                        
+                        # Save the inventory data periodically (every 5 items)
+                        if updated_count % 5 == 0:
+                            self.manager.save_inventory_data()
+                        
+                    except Exception as e:
+                        print(f"Error updating {sku}: {str(e)}")
+                        error_count += 1
+                
+                # Final save
+                self.manager.save_inventory_data()
+                
+                # Update UI and close
+                if not cancel_var.get():
+                    status_dialog.after(0, lambda: [
+                        status_label.config(text=f"Complete! Updated {updated_count} shoes."),
+                        progress.config(value=total_items),
+                        cancel_btn.config(text="Close")
+                    ])
+                    status_dialog.after(2000, lambda: [
+                        status_dialog.destroy(), 
+                        self.load_inventory(inventory_name),
+                        messagebox.showinfo("Update Complete", 
+                                            f"Updated: {updated_count}\nSkipped: {skipped_count}\nErrors: {error_count}")
+                    ])
+                else:
+                    # Just enable the close button if cancelled
+                    status_dialog.after(0, lambda: cancel_btn.config(text="Close"))
+                    
+            except Exception as e:
+                status_dialog.after(0, lambda e=e: [
+                    status_label.config(text=f"Error: {str(e)}"),
+                    cancel_btn.config(text="Close")
+                ])
+        
+        # Start update thread
+        threading.Thread(target=update_thread).start()
 
 
 def main():
