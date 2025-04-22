@@ -3,7 +3,10 @@ import tkinter
 from tkinter import ttk
 from tkinter import messagebox
 
-API_KEY = 'NYsXWV2Yk4JoLQIpda/lXw==MjudBjgujAQ76mEG'
+from ebayscrap import search_shoes, calculate_metrics  # Make sure these are imported from your ebayscrap module
+
+
+API_KEY = '3bkTDDs71+6Kl1DWe/zO2g==c7gmB5H52xxBCiMD'
 
 
 def get_tax_rate(zip_code):
@@ -70,6 +73,23 @@ def calculate_total_price(show_popup=True):
     except ValueError as e:
         print(e)
         messagebox.showwarning(title="Error", message="Please enter valid numbers.")
+
+
+def fetch_ebay_data():
+    sku = sku_entry.get().strip()
+    if not sku:
+        messagebox.showinfo("Info", "Please enter a SKU.")
+        return
+    
+    df = search_shoes(sku)
+    if df is None or df.empty:
+        messagebox.showinfo("No Results", "No eBay listings found for that SKU.")
+        return
+    
+    metrics = calculate_metrics(df)
+    if metrics:
+        message = "\n".join(f"{key.replace('_', ' ').capitalize()}: {value}" for key, value in metrics.items())
+        messagebox.showinfo("eBay Sales Metrics", message)
 
 
 def calculate_break_even():
@@ -164,11 +184,20 @@ zip_code_label.grid(row=0, column=0)
 zip_code_entry = tkinter.Entry(tax_frame)
 zip_code_entry.grid(row=1, column=0)
 
+#SKU enter
+sku_label = tkinter.Label(tax_frame, text="SKU (Optional)")
+sku_label.grid(row=2, column=0)
+sku_entry = tkinter.Entry(tax_frame)
+sku_entry.grid(row=3, column=0)
+
 # Calculate Buttons
 calculate_button = tkinter.Button(frame, text="Calculate Cost", command=calculate_total_price)
 calculate_button.grid(row=4, column=0, sticky="news", padx=20, pady=10)
 
 break_even_button = tkinter.Button(frame, text="Calculate Break Even", command=calculate_break_even)
 break_even_button.grid(row=5, column=0, sticky="news", padx=20, pady=10)
+
+fetch_button = tkinter.Button(frame, text="Fetch eBay Data", command=fetch_ebay_data)
+fetch_button.grid(row=6, column=0, sticky="news", padx=20, pady=10)
 
 window.mainloop()
